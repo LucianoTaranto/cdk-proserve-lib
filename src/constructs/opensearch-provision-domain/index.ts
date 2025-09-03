@@ -3,7 +3,7 @@
 
 import { join } from 'node:path';
 import { CustomResource, Duration, Stack } from 'aws-cdk-lib';
-import { IRole, Policy } from 'aws-cdk-lib/aws-iam';
+import { Effect, IRole, Policy, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { IKey } from 'aws-cdk-lib/aws-kms';
 import { Code, Runtime } from 'aws-cdk-lib/aws-lambda';
 import { IDomain } from 'aws-cdk-lib/aws-opensearchservice';
@@ -264,11 +264,17 @@ export class OpenSearchProvisionDomain extends Construct {
         const providerPermissions = new Policy(this, 'Permissions');
 
         asset.grantRead(providerPermissions);
-        props.domainAdmin.grantAssumeRole(provider.onEventHandler.role!);
+        providerPermissions.addStatements(
+            new PolicyStatement({
+                actions: ['sts:AssumeRole'],
+                effect: Effect.ALLOW,
+                resources: [props.domainAdmin.roleArn]
+            })
+        );
 
         provider.onEventHandler.role!.attachInlinePolicy(providerPermissions);
 
-        new CustomResource(this, 'OpenSearchProvisionDomain', {
+        const resource = new CustomResource(this, 'OpenSearchProvisionDomain', {
             serviceToken: provider.serviceToken,
             properties:
                 OpenSearchProvisionDomain.createCustomResourceProperties(
@@ -277,5 +283,7 @@ export class OpenSearchProvisionDomain extends Construct {
                 ),
             resourceType: 'Custom::OpenSearchProvisionDomain'
         });
+
+        resource.node.addDependency(providerPermissions);
     }
 }
